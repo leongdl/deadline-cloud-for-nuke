@@ -105,6 +105,26 @@ class SceneSettingsWidget(QWidget):
         self.gizmos_checkbox = QCheckBox("Include gizmos in job bundle", self)
         lyt.addWidget(self.gizmos_checkbox, 7, 0)
 
+        # Run Docker Job section
+        self.docker_job_box = QGroupBox("Run Docker Job")
+        docker_lyt = QGridLayout(self.docker_job_box)
+        lyt.addWidget(self.docker_job_box, 8, 0, 1, -1)
+
+        self.enable_docker_checkbox = QCheckBox("Enable Docker", self)
+        self.enable_docker_checkbox.setChecked(False)
+        self.enable_docker_checkbox.stateChanged.connect(self.activate_docker_changed)
+        docker_lyt.addWidget(self.enable_docker_checkbox, 0, 0, 1, -1)
+
+        docker_lyt.addWidget(QLabel("ECR Repo"), 1, 0)
+        self.ecr_repo_box = QComboBox(self)
+        self.ecr_repo_box.setEnabled(False)
+        docker_lyt.addWidget(self.ecr_repo_box, 1, 1, 1, -1)
+
+        docker_lyt.addWidget(QLabel("Select Image"), 2, 0)
+        self.select_image_box = QComboBox(self)
+        self.select_image_box.setEnabled(False)
+        docker_lyt.addWidget(self.select_image_box, 2, 1, 1, -1)
+
         def create_timeout_row(label, tooltip, row):
             qlabel = QLabel(label)
             qlabel.setToolTip(tooltip)
@@ -156,9 +176,9 @@ class SceneSettingsWidget(QWidget):
             self.include_adaptor_wheels = QCheckBox(
                 "Developer option: Include adaptor wheels", self
             )
-            lyt.addWidget(self.include_adaptor_wheels, 8, 0, 1, 2)
+            lyt.addWidget(self.include_adaptor_wheels, 9, 0, 1, 2)
 
-        lyt.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding), 9, 0)
+        lyt.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding), 10, 0)
 
     def indicate_if_valid(self, timeout_boxes: tuple[QLabel, QSpinBox, QSpinBox, QSpinBox]):
         if (
@@ -201,6 +221,11 @@ class SceneSettingsWidget(QWidget):
             + timeout_boxes[2].value() * 3600
             + timeout_boxes[3].value() * 60
         )
+
+    def activate_docker_changed(self, _=None):
+        state = self.enable_docker_checkbox.checkState()
+        self.ecr_repo_box.setEnabled(state == Qt.Checked)
+        self.select_image_box.setEnabled(state == Qt.Checked)
 
     def _rebuild_write_node_drop_down(self) -> None:
         self.write_node_box.clear()

@@ -39,6 +39,11 @@ class RenderSubmitterUISettings:  # pylint: disable=too-many-instance-attributes
 
     include_gizmos_in_job_bundle: bool = field(default=False, metadata={"sticky": True})
 
+    # Docker settings
+    enable_docker: bool = field(default=False, metadata={"sticky": True})
+    ecr_repo: str = field(default="", metadata={"sticky": True})
+    docker_image: str = field(default="", metadata={"sticky": True})
+
     # developer options
     include_adaptor_wheels: bool = field(default=False, metadata={"sticky": True})
 

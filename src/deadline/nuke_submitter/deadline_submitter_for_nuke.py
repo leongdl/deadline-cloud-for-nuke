@@ -150,7 +150,12 @@ def _remove_ocio_path_from_job_template(job_template: dict[str, Any]) -> None:
 def _get_job_template(settings: RenderSubmitterUISettings) -> dict[str, Any]:
     # Load the default Nuke job template, and then fill in scene-specific
     # values it needs.
-    with open(Path(__file__).parent / "default_nuke_job_template.yaml") as f:
+    if settings.enable_docker:
+        template_file = "default_docker_nuke_job_template.yaml"
+    else:
+        template_file = "default_nuke_job_template.yaml"
+    
+    with open(Path(__file__).parent / template_file) as f:
         job_template = yaml.safe_load(f)
 
     # Set the job's name and description
@@ -178,6 +183,13 @@ def _get_job_template(settings: RenderSubmitterUISettings) -> dict[str, Any]:
 
     # Set the View parameter allowed values
     parameter_def_map["View"]["allowedValues"] = ["All Views"] + sorted(nuke.views())
+
+    # Set Docker parameters if Docker is enabled
+    if settings.enable_docker:
+        if "ECRRepo" in parameter_def_map:
+            parameter_def_map["ECRRepo"]["default"] = settings.ecr_repo
+        if "DockerImageTag" in parameter_def_map:
+            parameter_def_map["DockerImageTag"]["default"] = settings.docker_image
 
     # if OCIO is disabled, remove OCIO path from the template
     if nuke_ocio.is_OCIO_enabled():
