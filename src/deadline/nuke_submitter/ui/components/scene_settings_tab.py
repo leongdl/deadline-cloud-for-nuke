@@ -5,6 +5,8 @@ UI widgets for the Scene Settings tab.
 """
 import os
 import nuke
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
 
 # Handle different Qt imports for different Nuke versions
 try:
@@ -118,6 +120,7 @@ class SceneSettingsWidget(QWidget):
         docker_lyt.addWidget(QLabel("ECR Repo"), 1, 0)
         self.ecr_repo_box = QComboBox(self)
         self.ecr_repo_box.setEnabled(False)
+        self.ecr_repo_box.currentIndexChanged.connect(self._on_ecr_repo_changed)
         docker_lyt.addWidget(self.ecr_repo_box, 1, 1, 1, -1)
 
         docker_lyt.addWidget(QLabel("Select Image"), 2, 0)
@@ -226,6 +229,71 @@ class SceneSettingsWidget(QWidget):
         state = self.enable_docker_checkbox.checkState()
         self.ecr_repo_box.setEnabled(state == Qt.Checked)
         self.select_image_box.setEnabled(state == Qt.Checked)
+        
+        if state == Qt.Checked:
+            self._populate_ecr_repos()
+        else:
+            self.ecr_repo_box.clear()
+            self.select_image_box.clear()
+
+    def _populate_ecr_repos(self):
+        """Populate the ECR repo dropdown with repositories from the current AWS account."""
+        self.ecr_repo_box.clear()
+        try:
+            ecr_client = boto3.client('ecr')
+            response = ecr_client.describe_repositories()
+            
+            repositories = response.get('repositories', [])
+            if repositories:
+                for repo in sorted(repositories, key=lambda r: r['repositoryName']):
+                    repo_uri = repo['repositoryUri']
+                    repo_name = repo['repositoryName']
+                    self.ecr_repo_box.addItem(repo_name, repo_uri)
+            else:
+                self.ecr_repo_box.addItem("No repositories found", "")
+        except NoCredentialsError:
+            self.ecr_repo_box.addItem("AWS credentials not configured", "")
+        except ClientError as e:
+            self.ecr_repo_box.addItem(f"Error: {str(e)}", "")
+        except Exception as e:
+            self.ecr_repo_box.addItem(f"Error loading repos: {str(e)}", "")
+
+    def _on_ecr_repo_changed(self, _=None):
+        """Populate the image dropdown when ECR repo selection changes."""
+        self._populate_ecr_images()
+
+    def _populate_ecr_images(self):
+        """Populate the image dropdown with images from the selected ECR repository."""
+        self.select_image_box.clear()
+        
+        repo_name = self.ecr_repo_box.currentText()
+        if not repo_name or repo_name in ["No repositories found", "AWS credentials not configured"] or repo_name.startswith("Error"):
+            return
+        
+        try:
+            ecr_client = boto3.client('ecr')
+            response = ecr_client.describe_images(
+                repositoryName=repo_name,
+                maxResults=100
+            )
+            
+            images = response.get('imageDetails', [])
+            if images:
+                # Collect all image tags
+                image_tags = []
+                for image in images:
+                    tags = image.get('imageTags', [])
+                    image_tags.extend(tags)
+                
+                # Sort and add to dropdown
+                for tag in sorted(set(image_tags)):
+                    self.select_image_box.addItem(tag, tag)
+            else:
+                self.select_image_box.addItem("No images found", "")
+        except ClientError as e:
+            self.select_image_box.addItem(f"Error: {str(e)}", "")
+        except Exception as e:
+            self.select_image_box.addItem(f"Error loading images: {str(e)}", "")
 
     def _rebuild_write_node_drop_down(self) -> None:
         self.write_node_box.clear()

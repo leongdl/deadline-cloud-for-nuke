@@ -186,10 +186,16 @@ def _get_job_template(settings: RenderSubmitterUISettings) -> dict[str, Any]:
 
     # Set Docker parameters if Docker is enabled
     if settings.enable_docker:
-        if "ECRRepo" in parameter_def_map:
-            parameter_def_map["ECRRepo"]["default"] = settings.ecr_repo
-        if "DockerImageTag" in parameter_def_map:
-            parameter_def_map["DockerImageTag"]["default"] = settings.docker_image
+        # Parse the ECR repo URI (format: registry/repository)
+        # e.g., "224071664257.dkr.ecr.us-west-2.amazonaws.com/sqex2"
+        if settings.ecr_repo and "/" in settings.ecr_repo:
+            registry, repository = settings.ecr_repo.rsplit("/", 1)
+            if "ECR_REGISTRY" in parameter_def_map:
+                parameter_def_map["ECR_REGISTRY"]["default"] = registry
+            if "NUKE_REPOSITORY" in parameter_def_map:
+                parameter_def_map["NUKE_REPOSITORY"]["default"] = repository
+        if "NUKE_TAG" in parameter_def_map:
+            parameter_def_map["NUKE_TAG"]["default"] = settings.docker_image
 
     # if OCIO is disabled, remove OCIO path from the template
     if nuke_ocio.is_OCIO_enabled():

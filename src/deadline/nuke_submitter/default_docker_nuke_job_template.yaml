@@ -71,18 +71,25 @@ parameterDefinitions:
   allowedValues:
   - 'true'
   - 'false'
-- name: ECRRepo
+- name: ECR_REGISTRY
   type: STRING
   userInterface:
     control: LINE_EDIT
-    label: ECR Repository
-  description: The ECR repository for the Docker image.
+    label: ECR Registry
+  description: The ECR registry URL (e.g., 224071664257.dkr.ecr.us-west-2.amazonaws.com).
   default: ''
-- name: DockerImageTag
+- name: NUKE_REPOSITORY
   type: STRING
   userInterface:
     control: LINE_EDIT
-    label: Docker Image Tag
+    label: Nuke Repository
+  description: The repository name in ECR.
+  default: ''
+- name: NUKE_TAG
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: Nuke Tag
   description: The Docker image tag to use.
   default: ''
 steps:
@@ -126,7 +133,7 @@ steps:
               -e SESI_LMHOST \
               -e VRAY_AUTH_CLIENT_FILE_PATH \
               -e VRAY_AUTH_CLIENT_SETTINGS \
-              {{Param.ECRRepo}}:{{Param.DockerImageTag}} \
+              {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
               env | sort
           cancelation:
             mode: NOTIFY_THEN_TERMINATE
@@ -163,7 +170,7 @@ steps:
             -e SESI_LMHOST \
             -e VRAY_AUTH_CLIENT_FILE_PATH \
             -e VRAY_AUTH_CLIENT_SETTINGS \
-            {{Param.ECRRepo}}:{{Param.DockerImageTag}} \
+            {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
             bash -c "
               echo 'Setting up Nuke environment...'
               export FLEXLM_TIMEOUT=3000000
