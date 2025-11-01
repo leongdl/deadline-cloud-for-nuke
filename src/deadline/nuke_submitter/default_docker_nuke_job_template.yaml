@@ -92,6 +92,13 @@ parameterDefinitions:
     label: Nuke Tag
   description: The Docker image tag to use.
   default: ''
+- name: AWS_REGION
+  type: STRING
+  userInterface:
+    control: LINE_EDIT
+    label: AWS Region
+  description: The AWS region for ECR (e.g., us-west-2).
+  default: 'us-west-2'
 steps:
 - name: Render
   parameterSpace:
@@ -115,26 +122,35 @@ steps:
           - '{{Param.WriteNode}}'
           views:
           - '{{Param.View}}'
+      - name: dockerEnter
+        filename: docker-enter.sh
+        type: TEXT
+        runnable: true
+        data: |
+          #!/bin/bash
+          set -e
+          echo "Logging in to Amazon ECR..."
+          aws ecr get-login-password --region {{Param.AWS_REGION}} | docker login --username AWS --password-stdin {{Param.ECR_REGISTRY}}
+          echo "Pulling Docker image..."
+          docker pull {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}}
+          echo "Running Docker container for environment check..."
+          docker run --rm \
+            -v "$(pwd):$(pwd)" \
+            -w "$(pwd)" \
+            -e FLEXLM_TIMEOUT \
+            -e ADSKFLEX_LICENSE_FILE \
+            -e foundry_LICENSE \
+            -e PIXAR_LICENSE_FILE \
+            -e g_licenseServerRLM \
+            -e redshift_LICENSE \
+            -e SESI_LMHOST \
+            -e VRAY_AUTH_CLIENT_FILE_PATH \
+            -e VRAY_AUTH_CLIENT_SETTINGS \
+            {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
+            bash -c "env | sort && echo '---' && ls -la"
       actions:
         onEnter:
-          command: bash
-          args:
-          - -c
-          - |
-            docker run --rm \
-              -v "$(pwd):/nuke_data" \
-              -w /nuke_data \
-              -e FLEXLM_TIMEOUT \
-              -e ADSKFLEX_LICENSE_FILE \
-              -e foundry_LICENSE \
-              -e PIXAR_LICENSE_FILE \
-              -e g_licenseServerRLM \
-              -e redshift_LICENSE \
-              -e SESI_LMHOST \
-              -e VRAY_AUTH_CLIENT_FILE_PATH \
-              -e VRAY_AUTH_CLIENT_SETTINGS \
-              {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
-              env | sort
+          command: '{{ Env.File.dockerEnter }}'
           cancelation:
             mode: NOTIFY_THEN_TERMINATE
         onExit:
@@ -150,46 +166,34 @@ steps:
       filename: run-data.yaml
       type: TEXT
       data: 'frameRange: "{{Task.Param.Frame}}"'
+    - name: dockerRun
+      filename: docker-run.sh
+      type: TEXT
+      runnable: true
+      data: |
+        #!/bin/bash
+        set -e
+        echo "Pulling Docker image..."
+        docker pull {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}}
+        echo "Running Nuke render in Docker container..."
+        docker run --rm \
+          --network host \
+          --ulimit stack=52428800 \
+          -v "$(pwd):$(pwd)" \
+          -w "$(pwd)" \
+          -e FLEXLM_TIMEOUT \
+          -e ADSKFLEX_LICENSE_FILE \
+          -e foundry_LICENSE \
+          -e PIXAR_LICENSE_FILE \
+          -e g_licenseServerRLM \
+          -e redshift_LICENSE \
+          -e SESI_LMHOST \
+          -e VRAY_AUTH_CLIENT_FILE_PATH \
+          -e VRAY_AUTH_CLIENT_SETTINGS \
+          {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
+          bash -c "echo 'Setting up Nuke environment...' && export FLEXLM_TIMEOUT=3000000 && cd /opt/nuke/Nuke16.0v1 && echo 'Displaying license environment variables:' && echo \"Autodesk License endpoint: \$ADSKFLEX_LICENSE_FILE\" && echo \"Autodesk Timeout set to: \$FLEXLM_TIMEOUT\" && echo \"Foundry License endpoint: \$foundry_LICENSE\" && echo \"Renderman License endpoint: \$PIXAR_LICENSE_FILE\" && echo \"C4D License endpoint: \$g_licenseServerRLM\" && echo \"Redshift/Red Giant License endpoint: \$redshift_LICENSE\" && echo \"SideFX License endpoint: \$SESI_LMHOST\" && echo \"Vray Auth client file path set to: \$VRAY_AUTH_CLIENT_FILE_PATH\" && echo \"Vray License endpoint: \$VRAY_AUTH_CLIENT_SETTINGS\" && echo 'Displaying Nuke environment variables:' && echo \"Nuke path: /opt/nuke/Nuke16.0v1\" && echo \"Current directory: \$(pwd)\" && echo 'Nuke environment ready. Starting render...' && SCRIPT_DIR=\$(dirname '{{Param.NukeScriptFile}}') && if [ '{{Param.WriteNode}}' = 'All Write Nodes' ]; then ./Nuke16.0 -t -x -F {{Task.Param.Frame}} --var output_path:\$SCRIPT_DIR '{{Param.NukeScriptFile}}'; else ./Nuke16.0 -t -X '{{Param.WriteNode}}' -F {{Task.Param.Frame}} --var output_path:\$SCRIPT_DIR '{{Param.NukeScriptFile}}'; fi"
     actions:
       onRun:
-        command: bash
-        args:
-        - -c
-        - |
-          docker run --rm \
-            --network host \
-            --ulimit stack=52428800 \
-            -v "$(pwd):/nuke_data" \
-            -w /nuke_data \
-            -e FLEXLM_TIMEOUT \
-            -e ADSKFLEX_LICENSE_FILE \
-            -e foundry_LICENSE \
-            -e PIXAR_LICENSE_FILE \
-            -e g_licenseServerRLM \
-            -e redshift_LICENSE \
-            -e SESI_LMHOST \
-            -e VRAY_AUTH_CLIENT_FILE_PATH \
-            -e VRAY_AUTH_CLIENT_SETTINGS \
-            {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
-            bash -c "
-              echo 'Setting up Nuke environment...'
-              export FLEXLM_TIMEOUT=3000000
-              cd /opt/nuke/Nuke16.0v1
-              echo 'Displaying license environment variables:'
-              echo \"Autodesk License endpoint: \$ADSKFLEX_LICENSE_FILE\"
-              echo \"Autodesk Timeout set to: \$FLEXLM_TIMEOUT\"
-              echo \"Foundry License endpoint: \$foundry_LICENSE\"
-              echo \"Renderman License endpoint: \$PIXAR_LICENSE_FILE\"
-              echo \"C4D License endpoint: \$g_licenseServerRLM\"
-              echo \"Redshift/Red Giant License endpoint: \$redshift_LICENSE\"
-              echo \"SideFX License endpoint: \$SESI_LMHOST\"
-              echo \"Vray Auth client file path set to: \$VRAY_AUTH_CLIENT_FILE_PATH\"
-              echo \"Vray License endpoint: \$VRAY_AUTH_CLIENT_SETTINGS\"
-              echo 'Displaying Nuke environment variables:'
-              echo \"Nuke path: /opt/nuke/Nuke16.0v1\"
-              echo \"Current directory: \$(pwd)\"
-              echo 'Nuke environment ready. Starting render...'
-              ./Nuke16.0 -t -x -F {{Task.Param.Frame}} '{{Param.NukeScriptFile}}'
-            "
+        command: '{{ Task.File.dockerRun }}'
         cancelation:
           mode: NOTIFY_THEN_TERMINATE

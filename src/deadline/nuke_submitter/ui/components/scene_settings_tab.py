@@ -5,8 +5,6 @@ UI widgets for the Scene Settings tab.
 """
 import os
 import nuke
-import boto3
-from botocore.exceptions import ClientError, NoCredentialsError
 
 # Handle different Qt imports for different Nuke versions
 try:
@@ -44,6 +42,7 @@ except ImportError:
 
 from ...assets import find_all_write_nodes
 from ...data_classes import RenderSubmitterUISettings
+from ...ecr_utils import list_ecr_repositories, list_ecr_images
 
 
 class SceneSettingsWidget(QWidget):
@@ -239,24 +238,14 @@ class SceneSettingsWidget(QWidget):
     def _populate_ecr_repos(self):
         """Populate the ECR repo dropdown with repositories from the current AWS account."""
         self.ecr_repo_box.clear()
-        try:
-            ecr_client = boto3.client('ecr')
-            response = ecr_client.describe_repositories()
-            
-            repositories = response.get('repositories', [])
-            if repositories:
-                for repo in sorted(repositories, key=lambda r: r['repositoryName']):
-                    repo_uri = repo['repositoryUri']
-                    repo_name = repo['repositoryName']
-                    self.ecr_repo_box.addItem(repo_name, repo_uri)
-            else:
-                self.ecr_repo_box.addItem("No repositories found", "")
-        except NoCredentialsError:
-            self.ecr_repo_box.addItem("AWS credentials not configured", "")
-        except ClientError as e:
-            self.ecr_repo_box.addItem(f"Error: {str(e)}", "")
-        except Exception as e:
-            self.ecr_repo_box.addItem(f"Error loading repos: {str(e)}", "")
+        
+        repositories = list_ecr_repositories()
+        if repositories:
+            for repo in repositories:
+                # Display the repo name, store the URI as data
+                self.ecr_repo_box.addItem(repo.name, repo.uri)
+        else:
+            self.ecr_repo_box.addItem("No repositories found", "")
 
     def _on_ecr_repo_changed(self, _=None):
         """Populate the image dropdown when ECR repo selection changes."""
@@ -267,33 +256,22 @@ class SceneSettingsWidget(QWidget):
         self.select_image_box.clear()
         
         repo_name = self.ecr_repo_box.currentText()
-        if not repo_name or repo_name in ["No repositories found", "AWS credentials not configured"] or repo_name.startswith("Error"):
+        if not repo_name or repo_name == "No repositories found":
             return
         
-        try:
-            ecr_client = boto3.client('ecr')
-            response = ecr_client.describe_images(
-                repositoryName=repo_name,
-                maxResults=100
-            )
+        images = list_ecr_images(repo_name)
+        if images:
+            # Add each image tag to the dropdown (skip untagged images)
+            for image in images:
+                if image.tag != "<untagged>":
+                    # Display the tag, store the tag as data
+                    self.select_image_box.addItem(image.tag, image.tag)
             
-            images = response.get('imageDetails', [])
-            if images:
-                # Collect all image tags
-                image_tags = []
-                for image in images:
-                    tags = image.get('imageTags', [])
-                    image_tags.extend(tags)
-                
-                # Sort and add to dropdown
-                for tag in sorted(set(image_tags)):
-                    self.select_image_box.addItem(tag, tag)
-            else:
-                self.select_image_box.addItem("No images found", "")
-        except ClientError as e:
-            self.select_image_box.addItem(f"Error: {str(e)}", "")
-        except Exception as e:
-            self.select_image_box.addItem(f"Error loading images: {str(e)}", "")
+            # If no tagged images were added, show a message
+            if self.select_image_box.count() == 0:
+                self.select_image_box.addItem("No tagged images found", "")
+        else:
+            self.select_image_box.addItem("No images found", "")
 
     def _rebuild_write_node_drop_down(self) -> None:
         self.write_node_box.clear()
@@ -363,6 +341,21 @@ class SceneSettingsWidget(QWidget):
         if self.developer_options:
             self.include_adaptor_wheels.setChecked(settings.include_adaptor_wheels)
 
+        # Restore Docker settings
+        self.enable_docker_checkbox.setChecked(settings.enable_docker)
+        if settings.enable_docker:
+            self._populate_ecr_repos()
+            # Try to restore the saved ECR repo
+            if settings.ecr_repo:
+                index = self.ecr_repo_box.findData(settings.ecr_repo)
+                if index >= 0:
+                    self.ecr_repo_box.setCurrentIndex(index)
+            # Try to restore the saved image
+            if settings.docker_image:
+                index = self.select_image_box.findData(settings.docker_image)
+                if index >= 0:
+                    self.select_image_box.setCurrentIndex(index)
+
         self.activate_timeout_changed(warn=False)  # don't warn when loading from sticky settings
 
     def update_settings(self, settings: RenderSubmitterUISettings):
@@ -383,6 +376,11 @@ class SceneSettingsWidget(QWidget):
         settings.on_exit_timeout_seconds = self.on_exit_timeout_seconds
 
         settings.include_gizmos_in_job_bundle = self.gizmos_checkbox.isChecked()
+
+        # Docker settings
+        settings.enable_docker = self.enable_docker_checkbox.isChecked()
+        settings.ecr_repo = self.ecr_repo_box.currentData() or ""
+        settings.docker_image = self.select_image_box.currentData() or ""
 
         if self.developer_options:
             settings.include_adaptor_wheels = self.include_adaptor_wheels.isChecked()

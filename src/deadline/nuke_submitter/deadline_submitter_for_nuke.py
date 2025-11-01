@@ -317,6 +317,23 @@ def _get_parameter_values(
         wheels_path = str(Path(__file__).parent.parent.parent.parent / "wheels")
         parameter_values.append({"name": "AdaptorWheels", "value": wheels_path})
 
+    # Set Docker parameters if Docker is enabled
+    if settings.enable_docker:
+        # Parse the ECR repo URI (format: registry/repository)
+        # Example: 224071664257.dkr.ecr.us-west-2.amazonaws.com/sqex2
+        if settings.ecr_repo and "/" in settings.ecr_repo:
+            registry, repository = settings.ecr_repo.rsplit("/", 1)
+            parameter_values.append({"name": "ECR_REGISTRY", "value": registry})
+            parameter_values.append({"name": "NUKE_REPOSITORY", "value": repository})
+            
+            # Extract AWS region from registry URL (e.g., us-west-2 from dkr.ecr.us-west-2.amazonaws.com)
+            if ".ecr." in registry and ".amazonaws.com" in registry:
+                region = registry.split(".ecr.")[1].split(".amazonaws.com")[0]
+                parameter_values.append({"name": "AWS_REGION", "value": region})
+        
+        if settings.docker_image:
+            parameter_values.append({"name": "NUKE_TAG", "value": settings.docker_image})
+
     # Check for any overlap between the job parameters we've defined and the
     # queue parameters. This is an error, as we weren't synchronizing the values
     # between the two different tabs where they came from.
@@ -513,3 +530,5 @@ def show_nuke_render_submitter(parent, f=Qt.WindowFlags()) -> "SubmitJobToDeadli
 
     g_submitter_dialog.show()
     return g_submitter_dialog
+
+
