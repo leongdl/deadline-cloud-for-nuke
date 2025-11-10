@@ -60,6 +60,8 @@ def get_scene_asset_references() -> AssetReferences:
             "The Nuke Script is not saved to disk. Please save it before opening the submitter dialog."
         )
     asset_references.input_filenames.add(script_file)
+    # Always add the scene's directory as a default output path
+    asset_references.output_directories.add(dirname(script_file))
     for node in nuke.allNodes(recurseGroups=True):
         # do not need assets for disabled nodes
         if node.knob("disable") and node.knob("disable").value():
