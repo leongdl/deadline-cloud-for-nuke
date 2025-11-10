@@ -135,6 +135,7 @@ steps:
           docker pull {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}}
           echo "Running Docker container for environment check..."
           docker run --rm \
+            --user root \
             -v "$(pwd):$(pwd)" \
             -w "$(pwd)" \
             -e FLEXLM_TIMEOUT \
@@ -179,6 +180,7 @@ steps:
         docker pull {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}}
         echo "Running Nuke render in Docker container..."
         docker run --rm \
+          --user root \
           --network host \
           --ulimit stack=52428800 \
           -v "$(pwd):$(pwd)" \
@@ -193,7 +195,7 @@ steps:
           -e VRAY_AUTH_CLIENT_FILE_PATH \
           -e VRAY_AUTH_CLIENT_SETTINGS \
           {{Param.ECR_REGISTRY}}/{{Param.NUKE_REPOSITORY}}:{{Param.NUKE_TAG}} \
-          bash -c "echo 'Starting Nuke render...' && export FLEXLM_TIMEOUT=3000000 && SCRIPT_DIR=\$(dirname '{{Param.NukeScriptFile}}') && if [ '{{Param.WriteNode}}' = 'All Write Nodes' ]; then Nuke -t -x -F {{Task.Param.Frame}} --var output_path:\$SCRIPT_DIR '{{Param.NukeScriptFile}}'; else Nuke -t -X '{{Param.WriteNode}}' -F {{Task.Param.Frame}} --var output_path:\$SCRIPT_DIR '{{Param.NukeScriptFile}}'; fi"
+          bash -c "echo 'Starting Nuke render...' && export FLEXLM_TIMEOUT=3000000 && export SCRIPT_DIR=\$(dirname '{{Param.NukeScriptFile}}') && if [ '{{Param.WriteNode}}' = 'All Write Nodes' ]; then Nuke -t -x -a -F {{Task.Param.Frame}} '{{Param.NukeScriptFile}}'; else Nuke -t -X '{{Param.WriteNode}}' -F {{Task.Param.Frame}} '{{Param.NukeScriptFile}}'; fi"
     actions:
       onRun:
         command: '{{ Task.File.dockerRun }}'
